@@ -96,7 +96,6 @@ int main(int argc, char * * argv)
     bool daemonise = false;
     int daemonise_result;
     int exit_code;
-    unsigned int args_remaining;
     int option;
     char const * listening_socket_name = NULL;
 
@@ -149,7 +148,7 @@ int main(int argc, char * * argv)
     bool const ubus_server_initialised = 
         ubus_server_initialise(
             ubus_ctx, 
-            &state_handler_st,
+            &state_handlers,
             NULL);
 
     if (!ubus_server_initialised)

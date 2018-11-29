@@ -68,7 +68,7 @@ read_gpio_inputs(uint32_t const gpio_input_pins_to_read_bitmask)
      * switch ON/closed). 
      * Therefore, the state should be reversed. 
      */
-    uint32_t const ~all_states = pifacedigital_read_reg(INPUT, hw_addr);
+    uint32_t const all_states = ~pifacedigital_read_reg(INPUT, hw_addr);
     uint32_t const interesting_states = all_states & gpio_input_pins_to_read_bitmask;
 
     return interesting_states;

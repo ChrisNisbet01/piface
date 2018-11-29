@@ -90,6 +90,7 @@ int main(int argc, char * * argv)
     int daemonise_result;
     int exit_code;
     int option;
+    char const * listening_socket_name = NULL;
 
     while ((option = getopt(argc, argv, "h:s:?d")) != -1)
     {

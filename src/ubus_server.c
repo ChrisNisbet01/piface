@@ -34,7 +34,7 @@ static char const invalid_instance_str[] = "Invalid instance";
 
 struct ubus_context * ubus_ctx;
 
-static message_handler_st const * handlers;
+static state_handler_st const * handlers;
 static void * user_info;
 
 static int

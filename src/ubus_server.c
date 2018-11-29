@@ -310,10 +310,12 @@ gpio_get_multiple_handler(
         if (!io_type_is_binary_input)
         {
             blobmsg_add_string(&b, error_str, "Can't read this IO type");
+            read_gpio = false;
         }
         else if (instance >= piface_num_inputs())
         {
             blobmsg_add_string(&b, error_str, invalid_instance_str);
+            read_gpio = false;
         }
         else
         {

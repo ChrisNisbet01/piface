@@ -3,6 +3,8 @@
 #include "debug.h"
 #include "relay_states.h"
 
+#define BIT(x) (1UL << (x))
+
 #include <libubox/blobmsg.h>
 
 #include <string.h>
@@ -243,6 +245,20 @@ gpio_get_multiple_handler(
 {
     int result;
     struct blob_buf b;
+    uint32_t states;
+    bool got_states;
+
+    if (handlers->get_state_handler != NULL)
+    {
+        states = handlers->get_state_handler(user_info, 0xffffffff);
+        got_states = true;
+    }
+    else
+    {
+        states = 0;
+        got_states = false;
+    }
+
 
     if (blobmsg_check_array(array_blob, BLOBMSG_TYPE_TABLE) < 0)
     {
@@ -287,21 +303,28 @@ gpio_get_multiple_handler(
 
         bool io_type_is_binary_input =
             strcmp(blobmsg_get_string(tb[GPIO_TYPE]), gpio_io_type_binary_input) == 0;
-        uint32_t const gpio_instance = blobmsg_get_u32(tb[GPIO_INSTANCE]);
-        bool const read_gpio = false;
+        uint32_t const instance = blobmsg_get_u32(tb[GPIO_INSTANCE]);
+        bool read_gpio;
         void * table_out = blobmsg_open_table(&b, NULL);
 
         if (!io_type_is_binary_input)
         {
             blobmsg_add_string(&b, error_str, "Can't read this IO type");
         }
-        else if (gpio_instance >= piface_num_inputs())
+        else if (instance >= piface_num_inputs())
         {
             blobmsg_add_string(&b, error_str, invalid_instance_str);
         }
-
+        else
+        {
+            read_gpio = got_states;
+        }
+        if (read_gpio)
+        {
+            blobmsg_add_u8(&b, value_str, (states & BIT(instance)) != 0);
+        }
         blobmsg_add_string(&b, gpio_io_type_str, blobmsg_get_string(tb[GPIO_TYPE]));
-        blobmsg_add_u32(&b, instance_str, gpio_instance);
+        blobmsg_add_u32(&b, instance_str, instance);
         blobmsg_add_u8(&b, result_str, read_gpio);
 
         blobmsg_close_table(&b, table_out);
@@ -356,13 +379,20 @@ gpio_get_handler(
     }
 
     uint32_t const pin = blobmsg_get_u32(tb[GPIO_GET_PIN]);
+    uint32_t const mask = BIT(pin);
     bool state;
+    bool success; 
 
-    (void)pin;
-
-    /* XXX - TODO: get the input state (are there any?) here. */
-    state = false;
-    bool const success = false;
+    if (handlers->get_state_handler != NULL)
+    {
+        state = handlers->get_state_handler(user_info, mask) & mask;
+        success = true;
+    }
+    else
+    {
+        state = false;
+        success = false;
+    }
 
     local_blob_buf_init(&b, 0);
 

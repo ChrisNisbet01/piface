@@ -1,7 +1,7 @@
 #ifndef __UBUS_SERVER_H__
 #define __UBUS_SERVER_H__
 
-#include "message_handler.h"
+#include "state_handler.h"
 
 #include <libubus.h>
 #include <stdbool.h>

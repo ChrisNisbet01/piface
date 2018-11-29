@@ -46,7 +46,11 @@ void relay_states_free(relay_states_st * const relay_states)
     free(relay_states);
 }
 
-void relay_states_set_state(relay_states_st * const relay_states, unsigned int relay_index, bool const state)
+void 
+relay_states_set_state(
+    relay_states_st * const relay_states, 
+    unsigned int relay_index, 
+    bool const state)
 {
     relay_states->states_modified |= BIT(relay_index);
     if (state)

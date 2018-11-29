@@ -27,8 +27,6 @@ static state_handler_st const state_handlers =
     .get_state_handler = get_state_handler
 };
 
-static message_handler_info_st message_handler_info;
-
 size_t piface_num_inputs(void)
 {
     return 8;

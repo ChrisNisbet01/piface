@@ -6,6 +6,8 @@ DEFINES = -D_GNU_SOURCE
 LIBS=\
 	-lubus \
 	-lubox \
+	-lpifacedigital \
+	-lmcp23s17
 
 LDFLAGS ?= -L$(LIB_PREFIX)/lib -Wl,-rpath $(LIB_PREFIX)/lib
 SRC_DIR=src

@@ -110,7 +110,7 @@ gpio_set_multiple_handler(
             blobmsg_add_string(&b, error_str, "Can't write this IO type");
             wrote_gpio = false;
         }
-        else if (gpio_instance >= numato_num_outputs())
+        else if (gpio_instance >= piface_num_outputs())
         {
             blobmsg_add_string(&b, error_str, invalid_instance_str);
             wrote_gpio = false;
@@ -295,7 +295,7 @@ gpio_get_multiple_handler(
         {
             blobmsg_add_string(&b, error_str, "Can't read this IO type");
         }
-        else if (gpio_instance >= numato_num_inputs())
+        else if (gpio_instance >= piface_num_inputs())
         {
             blobmsg_add_string(&b, error_str, invalid_instance_str);
         }
@@ -419,11 +419,11 @@ gpio_count_handler(
 
     if (strcmp(io_type, gpio_io_type_bi) == 0)
     {
-        count = numato_num_inputs();
+        count = piface_num_inputs();
     }
     else if (strcmp(io_type, gpio_io_type_bo) == 0)
     {
-        count = numato_num_outputs();
+        count = piface_num_outputs();
     }
     else
     {
@@ -460,14 +460,14 @@ gpio_counts_handler(
     table_out = blobmsg_open_table(&b, NULL);
 
     blobmsg_add_string(&b, gpio_io_type_str, gpio_io_type_binary_input);
-    blobmsg_add_u32(&b, gpio_count_str, numato_num_inputs());
+    blobmsg_add_u32(&b, gpio_count_str, piface_num_inputs());
 
     blobmsg_close_table(&b, table_out);
 
     table_out = blobmsg_open_table(&b, NULL);
 
     blobmsg_add_string(&b, gpio_io_type_str, gpio_io_type_binary_output);
-    blobmsg_add_u32(&b, gpio_count_str, numato_num_outputs());
+    blobmsg_add_u32(&b, gpio_count_str, piface_num_outputs());
 
     blobmsg_close_table(&b, table_out);
 

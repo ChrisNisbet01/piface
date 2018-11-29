@@ -57,9 +57,6 @@ write_gpio_outputs(
 
 static void set_state_handler(void * const user_info, relay_states_st * const desired_relay_states)
 {
-    message_handler_info_st * info = user_info;
-
-    (void)info;
     write_gpio_outputs(desired_relay_states);
 }
 
@@ -72,11 +69,8 @@ read_gpio_inputs(uint32_t const gpio_input_pins_to_read_bitmask)
     return interesting_states;
 }
 
-static uint32_t set_state_handler(void * const user_info, relay_states_st * const gpio_input_pins_to_read_bitmask)
+static uint32_t get_state_handler(void * const user_info, uint32_t const gpio_input_pins_to_read_bitmask)
 {
-    message_handler_info_st * info = user_info;
-
-    (void)info;
     return read_gpio_inputs(gpio_input_pins_to_read_bitmask);
 }
 
@@ -92,12 +86,10 @@ static void usage(char const * const program_name)
 
 int main(int argc, char * * argv)
 {
-    relay_module_info_st relay_module_info;
     bool daemonise = false;
     int daemonise_result;
     int exit_code;
     int option;
-    char const * listening_socket_name = NULL;
 
     while ((option = getopt(argc, argv, "h:s:?d")) != -1)
     {

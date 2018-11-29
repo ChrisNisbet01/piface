@@ -63,7 +63,12 @@ static void set_state_handler(void * const user_info, relay_states_st * const de
 static uint32_t
 read_gpio_inputs(uint32_t const gpio_input_pins_to_read_bitmask)
 {
-    uint32_t const all_states = pifacedigital_read_reg(INPUT, hw_addr);
+    /* The state will read true if the input is open, and I want 
+     * the input to read as active/ON when the input is low (i.e. 
+     * switch ON/closed). 
+     * Therefore, the state should be reversed. 
+     */
+    uint32_t const ~all_states = pifacedigital_read_reg(INPUT, hw_addr);
     uint32_t const interesting_states = all_states & gpio_input_pins_to_read_bitmask;
 
     return interesting_states;

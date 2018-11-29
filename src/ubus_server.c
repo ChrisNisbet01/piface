@@ -399,12 +399,7 @@ gpio_get_handler(
     blobmsg_add_u8(&b, result_str, success);
     if (success)
     {
-        /* The state will read true if the input is open, and I want 
-         * the input to read as active/ON when the input is low (i.e. 
-         * switch ON/closed). 
-         * Therefore, the state should be reversed. 
-         */
-        blobmsg_add_u8(&b, state_str, !state);
+        blobmsg_add_u8(&b, state_str, state);
     }
 
     ubus_send_reply(ctx, req, b.head);

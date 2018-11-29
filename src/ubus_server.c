@@ -8,7 +8,7 @@
 #include <string.h>
 #include <stdio.h>
 
-static char const gpio_object_name[] = "numato.gpio";
+static char const gpio_object_name[] = "piface.gpio";
 static char const gpio_object_type_name[] = "gpio";
 static char const gpio_get_method_name[] = "get";
 static char const gpio_set_method_name[] = "set";
@@ -518,7 +518,7 @@ static struct ubus_object gpio_object =
 bool
 ubus_server_initialise(
     struct ubus_context * const ctx,
-    message_handler_st const * const handlers_in,
+    state_handler_st const * const handlers_in,
     void * const user_info_in)
 {
     ubus_ctx = ctx;

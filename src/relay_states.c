@@ -2,13 +2,14 @@
 
 #include <stddef.h>
 #include <stdlib.h>
+#include <stdint.h>
 
 #define BIT(x) (1UL << (x))
 
 struct relay_states_st
 {
-    unsigned int states_modified; /* Bitmask indicating which bits in desired_states have meaning. */
-    unsigned int desired_states; /* Bitmask of the desired states. */
+    uint32_t states_modified; /* Bitmask indicating which bits in desired_states have meaning. */
+    uint32_t desired_states; /* Bitmask of the desired states. */
 }; 
 
 void relay_states_init(relay_states_st * const relay_states)
@@ -27,7 +28,7 @@ done:
 
 relay_states_st * relay_states_create(void)
 {
-    relay_states_st * const relay_states = malloc(sizeof *relay_states);
+    relay_states_st * const relay_states = calloc(1, sizeof *relay_states);
 
     if (relay_states == NULL)
     {
@@ -58,43 +59,13 @@ void relay_states_set_state(relay_states_st * const relay_states, unsigned int r
     }
 }
 
-relay_states_st * relay_states_combine(relay_states_st const * const previous_relay_states,
-                                       relay_states_st const * const new_relay_states)
+uint32_t relay_states_get_gpio_to_write_mask(relay_states_st const * const relay_states)
 {
-    relay_states_st * combined_relay_states = relay_states_create();
-
-    if (combined_relay_states == NULL)
-    {
-        goto done;
-    }
-    if (previous_relay_states == NULL)
-    {
-        /* Nothing to combine. Just take the new states. */
-        combined_relay_states->desired_states = new_relay_states->desired_states; 
-        combined_relay_states->states_modified = new_relay_states->states_modified;
-    }
-    else
-    {
-        combined_relay_states->desired_states = previous_relay_states->desired_states & ~new_relay_states->states_modified;
-        combined_relay_states->desired_states |= new_relay_states->desired_states;
-        combined_relay_states->states_modified = previous_relay_states->states_modified | new_relay_states->states_modified;
-    }
-
-done:
-    return combined_relay_states;
+    return relay_states->states_modified;
 }
 
-unsigned int relay_states_get_states_bitmask(relay_states_st const * const relay_states)
+uint32_t relay_states_get_gpio_states_mask(relay_states_st const * const relay_states)
 {
     return relay_states->desired_states;
 }
 
-size_t numato_num_inputs(void)
-{
-    return 0;
-}
-
-size_t numato_num_outputs(void)
-{
-    return 8;
-}

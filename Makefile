@@ -1,13 +1,11 @@
 #Makefile to build numato relay controller
 
 LIB_PREFIX?=/usr/local
-INCLUDES = -I/src -I$(LIB_PREFIX)/include -I$(LIB_PREFIX)/include/ioutils
+INCLUDES = -I/src -I$(LIB_PREFIX)/include
 DEFINES = -D_GNU_SOURCE
 LIBS=\
-	-ljson-c \
 	-lubus \
 	-lubox \
-	-lioutils
 
 LDFLAGS ?= -L$(LIB_PREFIX)/lib -Wl,-rpath $(LIB_PREFIX)/lib
 SRC_DIR=src
@@ -16,7 +14,7 @@ DEP_DIR=dep
 C_DEFINES=-g
 CFLAGS =$(C_DEFINES) -Wall -Werror $(INCLUDES) $(DEFINES)
 
-TARGET = numato
+TARGET = piface
 
 vpath %.c src
 vpath %.h src

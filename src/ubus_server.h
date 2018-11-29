@@ -9,7 +9,7 @@
 bool
 ubus_server_initialise(
     struct ubus_context * const ctx,
-    message_handler_st const * const handlers_in,
+    state_handler_st const * const handlers_in,
     void * const user_info_in);
 
 void

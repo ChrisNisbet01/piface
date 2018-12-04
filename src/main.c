@@ -2,10 +2,10 @@
 #include "daemonize.h"
 #include "debug.h"
 #include "ubus.h"
-#include "ubus_server.h"
 #include "state_handler.h"
 
 #include <pifacedigital.h>
+#include <libubusgpio/libubusgpio.h>
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -14,18 +14,9 @@
 #include <errno.h>
 #include <stdlib.h>
  
+#define BIT(x) (1UL << (x))
 
 static int hw_addr = 0;
-
-static void set_state_handler(void * const user_info, relay_states_st * const desired_relay_states);
-static uint32_t get_state_handler(void * const user_info, uint32_t const gpio_input_pins_to_read_bitmask); 
-
-
-static state_handler_st const state_handlers =
-{
-    .set_state_handler = set_state_handler,
-    .get_state_handler = get_state_handler
-};
 
 size_t piface_num_inputs(void)
 {
@@ -55,11 +46,6 @@ write_gpio_outputs(
     pifacedigital_write_reg(states, OUTPUT, hw_addr);
 }
 
-static void set_state_handler(void * const user_info, relay_states_st * const desired_relay_states)
-{
-    write_gpio_outputs(desired_relay_states);
-}
-
 static uint32_t
 read_gpio_inputs(uint32_t const gpio_input_pins_to_read_bitmask)
 {
@@ -74,10 +60,110 @@ read_gpio_inputs(uint32_t const gpio_input_pins_to_read_bitmask)
     return interesting_states;
 }
 
-static uint32_t get_state_handler(void * const user_info, uint32_t const gpio_input_pins_to_read_bitmask)
+static bool get_callback(
+    void * const callback_ctx,
+    char const * const io_type,
+    size_t const instance,
+    bool * const state)
 {
-    return read_gpio_inputs(gpio_input_pins_to_read_bitmask);
+    bool read_io;
+
+    if (strcmp(io_type, "binary-input") != 0)
+    {
+        read_io = false;
+        goto done;
+    }
+
+    if (instance >= piface_num_inputs())
+    {
+        read_io = false;
+        goto done;
+    }
+
+    uint32_t bitmask = BIT(instance);
+    *state = read_gpio_inputs(bitmask) != 0;
+
+    read_io = true;
+
+done:
+    return read_io;
 }
+
+static void * set_start_callback(void * const callback_ctx)
+{
+    relay_states_st * const relay_states = relay_states_create(); 
+
+    return relay_states;
+}
+
+static void set_end_callback(void * const callback_ctx)
+{
+    relay_states_st * const relay_states = callback_ctx;
+
+    if (relay_states == NULL)
+    {
+        goto done;
+    }
+
+    write_gpio_outputs(relay_states);
+    relay_states_free(relay_states);
+
+done:
+    return;
+}
+
+static bool set_callback(
+    void * const callback_ctx,
+    char const * const io_type,
+    size_t const instance,
+    bool const state)
+{
+    relay_states_st * const relay_states = callback_ctx;
+    bool wrote_io;
+
+    if (strcmp(io_type, "binary-output") != 0)
+    {
+        wrote_io = false;
+        goto done;
+    }
+
+    if (instance >= piface_num_outputs())
+    {
+        wrote_io = false;
+        goto done;
+    }
+
+    if (relay_states == NULL)
+    {
+        wrote_io = false;
+        goto done;
+    }
+
+    relay_states_set_state(relay_states, instance, state);
+
+    wrote_io = true;
+
+done:
+    return wrote_io;
+}
+
+static void count_callback(
+    void * const callback,
+    append_count_callback_fn const append_callback,
+    void * const append_ctx)
+{
+    append_callback(append_ctx, "binary-input", piface_num_inputs());
+    append_callback(append_ctx, "binary-output", piface_num_outputs());
+}
+
+static ubus_gpio_server_handlers_st const ubus_gpio_server_handlers =
+{
+    .count_callback = count_callback,
+    .get_callback = get_callback,
+    .set_start_callback = set_start_callback,
+    .set_callback = set_callback,
+    .set_end_callback = set_end_callback
+}; 
 
 static void usage(char const * const program_name)
 {
@@ -143,13 +229,14 @@ int main(int argc, char * * argv)
         goto done;
     }
 
-    bool const ubus_server_initialised = 
-        ubus_server_initialise(
-            ubus_ctx, 
-            &state_handlers,
-            NULL);
+    ubus_gpio_server_ctx_st * ubus_server_ctx =
+        ubus_gpio_server_initialise(
+        ubus_ctx,
+        "piface.gpio",
+        &ubus_gpio_server_handlers,
+        NULL); 
 
-    if (!ubus_server_initialised)
+    if (ubus_server_ctx == NULL)
     {
         DPRINTF("\r\nfailed to initialise UBUS server\n");
         exit_code = EXIT_FAILURE;
@@ -165,11 +252,12 @@ int main(int argc, char * * argv)
 
     pifacedigital_close(hw_addr);
 
+    ubus_gpio_server_done(ubus_ctx, ubus_server_ctx); 
+
 uloop_done:
     uloop_done();
 
     ubus_done();
-    ubus_server_done(); 
 
     exit_code = EXIT_SUCCESS;
 

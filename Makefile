@@ -1,13 +1,18 @@
 #Makefile to build numato relay controller
 
+ifneq ($(LIB_PREFIX),)
+INCLUDES += -I$(LIB_PREFIX)/include
+endif
+
 LIB_PREFIX?=/usr/local
-INCLUDES = -I/src -I$(LIB_PREFIX)/include
+INCLUDES += -I/src
 DEFINES = -D_GNU_SOURCE
 LIBS=\
 	-lubus \
 	-lubox \
 	-lpifacedigital \
-	-lmcp23s17
+	-lmcp23s17 \
+	-lubusgpio
 
 LDFLAGS ?= -L$(LIB_PREFIX)/lib -Wl,-rpath $(LIB_PREFIX)/lib
 SRC_DIR=src

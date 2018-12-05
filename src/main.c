@@ -60,12 +60,40 @@ read_gpio_inputs(uint32_t const gpio_input_pins_to_read_bitmask)
     return interesting_states;
 }
 
+typedef struct
+{
+    uint32_t all_states;
+} get_callback_ctx_st;
+
+static void * get_start_callback(void * const callback_ctx)
+{
+    get_callback_ctx_st * const ctx = calloc(1, sizeof *ctx);
+
+    if (ctx == NULL)
+    {
+        goto done;
+    }
+
+    ctx->all_states = read_gpio_inputs(0xffffffff);
+
+done:
+    return ctx;
+}
+
+static void get_end_callback(void * const callback_ctx)
+{
+    get_callback_ctx_st * const ctx = callback_ctx;
+
+    free(ctx);
+}
+
 static bool get_callback(
     void * const callback_ctx,
     char const * const io_type,
     size_t const instance,
     bool * const state)
 {
+    get_callback_ctx_st * const ctx = callback_ctx;
     bool read_io;
 
     if (strcmp(io_type, "binary-input") != 0)
@@ -80,8 +108,8 @@ static bool get_callback(
         goto done;
     }
 
-    uint32_t bitmask = BIT(instance);
-    *state = read_gpio_inputs(bitmask) != 0;
+    uint32_t const bitmask = BIT(instance);
+    *state = (ctx->all_states & bitmask) != 0;
 
     read_io = true;
 
@@ -159,11 +187,19 @@ static void count_callback(
 static ubus_gpio_server_handlers_st const ubus_gpio_server_handlers =
 {
     .count_callback = count_callback,
-    .get_callback = get_callback,
-    .set_start_callback = set_start_callback,
-    .set_callback = set_callback,
-    .set_end_callback = set_end_callback
-}; 
+    .get =
+    {
+        .start_callback = get_start_callback,
+        .get_callback = get_callback,
+        .end_callback = get_end_callback
+    },
+    .set =
+    {
+        .start_callback = set_start_callback,
+        .set_callback = set_callback,
+        .end_callback = set_end_callback
+    }
+};
 
 static void usage(char const * const program_name)
 {

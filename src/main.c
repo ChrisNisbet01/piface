@@ -5,7 +5,7 @@
 #include "state_handler.h"
 
 #include <pifacedigital.h>
-#include <libubusgpio/libubusgpio.h>
+#include <libubusgpio/ubus_gpio_server.h>
 
 #include <stdbool.h>
 #include <stdio.h>

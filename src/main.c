@@ -92,7 +92,7 @@ static bool get_callback(
     void * const callback_ctx,
     char const * const io_type,
     size_t const instance,
-    bool * const state)
+    ubus_gpio_data_type_st * const value)
 {
     get_callback_ctx_st * const ctx = callback_ctx;
     bool read_io;
@@ -110,7 +110,9 @@ static bool get_callback(
     }
 
     uint32_t const bitmask = BIT(instance);
-    *state = (ctx->all_states & bitmask) != 0;
+
+    value->type = ubus_gpio_data_type_bool;
+    value->value.b = (ctx->all_states & bitmask) != 0;
 
     read_io = true;
 

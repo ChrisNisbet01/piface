@@ -13,7 +13,8 @@
 #include <unistd.h>
 #include <errno.h>
 #include <stdlib.h>
- 
+#include <math.h>
+
 #define BIT(x) (1UL << (x))
 
 static int hw_addr = 0;
@@ -144,7 +145,7 @@ static bool set_callback(
     void * const callback_ctx,
     char const * const io_type,
     size_t const instance,
-    bool const state)
+    ubus_gpio_data_type_st const * const value)
 {
     relay_states_st * const relay_states = callback_ctx;
     bool wrote_io;
@@ -165,6 +166,23 @@ static bool set_callback(
     {
         wrote_io = false;
         goto done;
+    }
+
+    bool state;
+    switch (value->type)
+    {
+        case ubus_gpio_data_type_bool:
+            state = value->value.b;
+            break;
+        case ubus_gpio_data_type_int:
+            state = !!value->value.u32;
+            break;
+        case ubus_gpio_data_type_double:
+            state = fabs(value->value.dbl) > 0.01f;
+            break;
+        default:
+            wrote_io = false;
+            goto done;
     }
 
     relay_states_set_state(relay_states, instance, state);

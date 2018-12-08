@@ -123,14 +123,16 @@ static bool read_state_from_ctx(
 {
     bool read_state;
 
-    if (strcmp(io_type, binary_input_str) == 0 && instance < piface_num_inputs())
+    if (strcmp(io_type, binary_input_str) == 0 
+        && instance < piface_num_inputs())
     {
         uint32_t const bitmask = BIT(instance);
 
         *state = (ctx->input_states & bitmask) != 0;
         read_state = true;
     }
-    else if (strcmp(io_type, binary_output_str) == 0 && instance < piface_num_outputs())
+    else if (strcmp(io_type, binary_output_str) == 0 
+             && instance < piface_num_outputs())
     {
         uint32_t const bitmask = BIT(instance);
 

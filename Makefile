@@ -31,7 +31,7 @@ SRCS=$(wildcard $(SRC_DIR)/*.c)
 
 OBJS=$(notdir ${SRCS:.c=.o})
 
-.PHONY: all clean
+.PHONY: all clean pre_build
 
 all: pre_build ${TARGET}
 

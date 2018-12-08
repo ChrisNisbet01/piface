@@ -21,8 +21,4 @@ uint32_t relay_states_get_gpio_to_write_mask(relay_states_st const * const relay
 
 uint32_t relay_states_get_gpio_states_mask(relay_states_st const * const relay_states);
 
-size_t piface_num_inputs(void);
-
-size_t piface_num_outputs(void);
-
 #endif /* __RELAY_STATES_H__ */

@@ -1,4 +1,4 @@
-#include "relay_states.h"
+#include "io_states.h"
 #include "debug.h"
 #include "ubus.h"
 
@@ -172,27 +172,27 @@ done:
 static void * set_start_callback(void * const callback_ctx)
 {
     (void)callback_ctx;
-    relay_states_st * const relay_states = relay_states_create();
+    io_states_st * const io_states = io_states_create();
 
-    return relay_states;
+    return io_states;
 }
 
 static void set_end_callback(void * const callback_ctx)
 {
-    relay_states_st * const relay_states = callback_ctx;
+    io_states_st * const io_states = callback_ctx;
 
-    if (relay_states == NULL)
+    if (io_states == NULL)
     {
         goto done;
     }
 
-    uint32_t const gpio_to_write_mask = relay_states_get_gpio_to_write_mask(relay_states);
-    uint32_t const gpio_values = relay_states_get_gpio_states_mask(relay_states); 
+    uint32_t const gpio_to_write_mask = io_states_get_interesting_states_mask(io_states);
+    uint32_t const gpio_values = io_states_get_states_mask(io_states);
 
     write_gpio_outputs(gpio_to_write_mask, gpio_values);
 
 done:
-    relay_states_free(relay_states);
+    io_states_free(io_states);
     return;
 }
 
@@ -202,7 +202,7 @@ static bool set_callback(
     size_t const instance,
     ubus_gpio_data_type_st const * const value)
 {
-    relay_states_st * const relay_states = callback_ctx;
+    io_states_st * const io_states = callback_ctx;
     bool wrote_io;
     bool const io_instance_is_writeable =
         strcmp(io_type, binary_output_str) == 0
@@ -214,7 +214,7 @@ static bool set_callback(
         goto done;
     }
 
-    if (relay_states == NULL)
+    if (io_states == NULL)
     {
         wrote_io = false;
         goto done;
@@ -228,7 +228,7 @@ static bool set_callback(
         goto done;
     }
 
-    relay_states_set_state(relay_states, instance, state);
+    io_states_set_state(io_states, instance, state);
 
     wrote_io = true;
 

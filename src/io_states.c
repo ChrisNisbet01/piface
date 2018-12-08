@@ -1,4 +1,4 @@
-#include "relay_states.h"
+#include "io_states.h"
 
 #include <stddef.h>
 #include <stdlib.h>
@@ -6,70 +6,50 @@
 
 #define BIT(x) (1UL << (x))
 
-struct relay_states_st
+struct io_states_st
 {
     uint32_t states_modified; /* Bitmask indicating which bits in desired_states have meaning. */
-    uint32_t desired_states; /* Bitmask of the desired states. */
+    uint32_t states; /* Bitmask of the desired states. */
 }; 
 
-void relay_states_init(relay_states_st * const relay_states)
+io_states_st * io_states_create(void)
 {
-    if (relay_states == NULL)
-    {
-        goto done;
-    }
+    io_states_st * const io_state_ctx = calloc(1, sizeof *io_state_ctx);
 
-    relay_states->states_modified = 0;
-    relay_states->desired_states = 0;
-
-done:
-    return;
+    return io_state_ctx;
 }
 
-relay_states_st * relay_states_create(void)
+void io_states_free(io_states_st * const io_state_ctx)
 {
-    relay_states_st * const relay_states = calloc(1, sizeof *relay_states);
-
-    if (relay_states == NULL)
-    {
-        goto done;
-    }
-
-    relay_states_init(relay_states);
-
-done:
-    return relay_states;
-}
-
-void relay_states_free(relay_states_st * const relay_states)
-{
-    free(relay_states);
+    free(io_state_ctx);
 }
 
 void 
-relay_states_set_state(
-    relay_states_st * const relay_states, 
-    unsigned int relay_index, 
+io_states_set_state(
+    io_states_st * const io_state_ctx,
+    unsigned int index, 
     bool const state)
 {
-    relay_states->states_modified |= BIT(relay_index);
+    io_state_ctx->states_modified |= BIT(index);
     if (state)
     {
-        relay_states->desired_states |= BIT(relay_index);
+        io_state_ctx->states |= BIT(index);
     }
     else
     {
-        relay_states->desired_states &= ~BIT(relay_index);
+        io_state_ctx->states &= ~BIT(index);
     }
 }
 
-uint32_t relay_states_get_gpio_to_write_mask(relay_states_st const * const relay_states)
+uint32_t io_states_get_interesting_states_mask(
+    io_states_st const * const io_state_ctx)
 {
-    return relay_states->states_modified;
+    return io_state_ctx->states_modified;
 }
 
-uint32_t relay_states_get_gpio_states_mask(relay_states_st const * const relay_states)
+uint32_t io_states_get_states_mask(
+    io_states_st const * const io_state_ctx)
 {
-    return relay_states->desired_states;
+    return io_state_ctx->states;
 }
 

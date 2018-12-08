@@ -1,24 +1,27 @@
-#ifndef __RELAY_STATES_H__
-#define __RELAY_STATES_H__
+#ifndef __IO_STATES_H__
+#define __IO_STATES_H__
 
 #include <stddef.h>
 #include <stdbool.h>
 #include <stdint.h>
 
-typedef struct relay_states_st relay_states_st;
+typedef struct io_states_st io_states_st;
 
-void relay_states_init(relay_states_st * const relay_states);
-relay_states_st * relay_states_create(void);
-void relay_states_free(relay_states_st * const relay_states);
+io_states_st * io_states_create(void);
+
+void io_states_free(
+    io_states_st * const io_state_ctx);
 
 void 
-relay_states_set_state(
-    relay_states_st * const relay_states, 
-    unsigned int relay_index, 
+io_states_set_state(
+    io_states_st * const io_state_ctx,
+    unsigned int index, 
     bool const state);
 
-uint32_t relay_states_get_gpio_to_write_mask(relay_states_st const * const relay_states);
+uint32_t io_states_get_interesting_states_mask(
+    io_states_st const * const io_state_ctx);
 
-uint32_t relay_states_get_gpio_states_mask(relay_states_st const * const relay_states);
+uint32_t io_states_get_states_mask(
+    io_states_st const * const io_state_ctx);
 
-#endif /* __RELAY_STATES_H__ */
+#endif /* __IO_STATES_H__ */

@@ -18,6 +18,8 @@
 #define BIT(x) (1UL << (x))
 
 static int hw_addr = 0;
+static char const binary_input_str[] = "binary-input";
+static char const binary_output_str[] = "binary-output"; 
 
 size_t piface_num_inputs(void)
 {
@@ -61,9 +63,19 @@ read_gpio_inputs(uint32_t const gpio_input_pins_to_read_bitmask)
     return interesting_states;
 }
 
+static uint32_t
+read_gpio_outputs(uint32_t const gpio_output_pins_to_read_bitmask)
+{
+    uint32_t const all_states = pifacedigital_read_reg(OUTPUT, hw_addr);
+    uint32_t const interesting_states = all_states & gpio_output_pins_to_read_bitmask;
+
+    return interesting_states;
+}
+
 typedef struct
 {
-    uint32_t all_states;
+    uint32_t input_states;
+    uint32_t output_states;
 } get_callback_ctx_st;
 
 static void * get_start_callback(void * const callback_ctx)
@@ -75,7 +87,8 @@ static void * get_start_callback(void * const callback_ctx)
         goto done;
     }
 
-    ctx->all_states = read_gpio_inputs(0xffffffff);
+    ctx->input_states = read_gpio_inputs(0xffffffff);
+    ctx->output_states = read_gpio_outputs(0xffffffff); 
 
 done:
     return ctx;
@@ -88,31 +101,53 @@ static void get_end_callback(void * const callback_ctx)
     free(ctx);
 }
 
+static bool read_state_from_ctx(
+    get_callback_ctx_st const * const ctx,
+    char const * const io_type,
+    size_t const instance,
+    bool * const state)
+{
+    bool read_state;
+
+    if (strcmp(io_type, binary_input_str) == 0 && instance < piface_num_inputs())
+    {
+        uint32_t const bitmask = BIT(instance);
+
+        *state = (ctx->input_states & bitmask) != 0;
+        read_state = true;
+    }
+    else if (strcmp(io_type, binary_output_str) == 0 && instance < piface_num_outputs())
+    {
+        uint32_t const bitmask = BIT(instance);
+
+        *state = (ctx->output_states & bitmask) != 0;
+        read_state = true;
+    }
+    else
+    {
+        read_state = false;
+    }
+
+    return read_state;
+}
+
 static bool get_callback(
     void * const callback_ctx,
     char const * const io_type,
     size_t const instance,
     ubus_gpio_data_type_st * const value)
 {
-    get_callback_ctx_st * const ctx = callback_ctx;
+    get_callback_ctx_st const * const ctx = callback_ctx;
     bool read_io;
+    bool state;
 
-    if (strcmp(io_type, "binary-input") != 0)
+    if (!read_state_from_ctx(ctx, io_type, instance, &state))
     {
         read_io = false;
         goto done;
     }
 
-    if (instance >= piface_num_inputs())
-    {
-        read_io = false;
-        goto done;
-    }
-
-    uint32_t const bitmask = BIT(instance);
-
-    value->type = ubus_gpio_data_type_bool;
-    value->value.b = (ctx->all_states & bitmask) != 0;
+    ubus_gpio_data_value_set_bool(value, state);
 
     read_io = true;
 
@@ -152,7 +187,7 @@ static bool set_callback(
     relay_states_st * const relay_states = callback_ctx;
     bool wrote_io;
 
-    if (strcmp(io_type, "binary-output") != 0)
+    if (strcmp(io_type, binary_output_str) != 0)
     {
         wrote_io = false;
         goto done;
@@ -171,20 +206,11 @@ static bool set_callback(
     }
 
     bool state;
-    switch (value->type)
+
+    if (!ubus_gpio_data_value_get_bool(value, &state))
     {
-        case ubus_gpio_data_type_bool:
-            state = value->value.b;
-            break;
-        case ubus_gpio_data_type_int:
-            state = !!value->value.u32;
-            break;
-        case ubus_gpio_data_type_double:
-            state = fabs(value->value.dbl) > 0.01f;
-            break;
-        default:
-            wrote_io = false;
-            goto done;
+        wrote_io = false;
+        goto done;
     }
 
     relay_states_set_state(relay_states, instance, state);
@@ -200,8 +226,8 @@ static void count_callback(
     append_count_callback_fn const append_callback,
     void * const append_ctx)
 {
-    append_callback(append_ctx, "binary-input", piface_num_inputs());
-    append_callback(append_ctx, "binary-output", piface_num_outputs());
+    append_callback(append_ctx, binary_input_str, piface_num_inputs());
+    append_callback(append_ctx, binary_output_str, piface_num_outputs());
 }
 
 static ubus_gpio_server_handlers_st const ubus_gpio_server_handlers =

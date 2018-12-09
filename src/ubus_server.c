@@ -279,7 +279,7 @@ static void handle_interrupt(struct uloop_fd * u, unsigned int events)
     (void)u;
     (void)events;
 
-    fprintf(stderr, "got interrupt\n");
+    fprintf(stderr, "got interrupt 0x%x\n", events);
 
     // Read & return input register, thus clearing interrupt
     uint8_t data = read_piface_register(0x11);
@@ -298,11 +298,6 @@ static void handle_interrupt(struct uloop_fd * u, unsigned int events)
         fprintf(stderr, "read %d gpio bytes\n", i);
     }
 
-    lseek(epoll_fd, 0, SEEK_SET);
-    while ((i = read(epoll_fd, buf, sizeof buf)) > 0)
-    {
-        fprintf(stderr, "read %d epoll bytes\n", i);
-    }
 }
 
 #define GPIO_INTERRUPT_PIN 25
@@ -371,7 +366,7 @@ static void listen_for_gpio_interrupts(void)
     if (epoll_fd >= 0)
     {
         gpio_interrupt_fd.fd = epoll_fd;
-        uloop_fd_add(&gpio_interrupt_fd, ULOOP_READ);
+        uloop_fd_add(&gpio_interrupt_fd, ULOOP_READ | ULOOP_BLOCKING);
     }
 }
 

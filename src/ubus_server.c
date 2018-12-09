@@ -288,8 +288,8 @@ static void handle_interrupt(struct uloop_fd * u, unsigned int events)
      */
 
     /* Read the input register, thus clearing the interrupt. */
-    uint8_t data = read_piface_register(INPUT);
-    fprintf(stderr, "TODO: send ubus exent showing input states 0x%x\n", data);
+    uint8_t const data = read_piface_register(INPUT);
+    fprintf(stderr, "TODO: send ubus event showing input states 0x%x\n", data);
 
     /* Now call epoll_wait, which will stop this handler getting called until 
      * the inputs change state again. 

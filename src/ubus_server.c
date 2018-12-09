@@ -279,25 +279,11 @@ static void handle_interrupt(struct uloop_fd * u, unsigned int events)
     (void)u;
     (void)events;
 
-    fprintf(stderr, "got interrupt 0x%x\n", events);
-
     // Read & return input register, thus clearing interrupt
     uint8_t data = read_piface_register(0x11);
+    fprintf(stderr, "TODO: send ubus exent showing input states 0x%x\n", data);
 
-    if (data != 0xff)
-    {
-        fprintf(stderr, "data: 0x%x\n", data);
-    }
-
-    char buf[20];
-    int i;
-
-    lseek(gpio_pin_fd, 0, SEEK_SET);
-    while ((i = read(gpio_pin_fd, buf, sizeof buf)) > 0)
-    {
-        fprintf(stderr, "read %d gpio bytes\n", i);
-    }
-
+    epoll_wait(epoll_fd, &mcp23s17_epoll_events, 1, -1);
 }
 
 #define GPIO_INTERRUPT_PIN 25
@@ -339,7 +325,7 @@ static int init_epoll(void)
                 errno);
         return -1;
     } else {
-        epoll_ctl_events.events = EPOLLIN | EPOLLPRI;
+        epoll_ctl_events.events = EPOLLIN | EPOLLPRI | EPOLLET;
         epoll_ctl_events.data.fd = gpio_pin_fd;
 
         if(epoll_ctl(epoll_fd, EPOLL_CTL_ADD, gpio_pin_fd, &epoll_ctl_events) != 0) {
@@ -362,11 +348,10 @@ static void listen_for_gpio_interrupts(void)
     pifacedigital_enable_interrupts(); 
 
     init_epoll();
-    fprintf(stderr, "interrupt fd %d %d\n", epoll_fd, gpio_pin_fd);
     if (epoll_fd >= 0)
     {
         gpio_interrupt_fd.fd = epoll_fd;
-        uloop_fd_add(&gpio_interrupt_fd, ULOOP_READ | ULOOP_BLOCKING);
+        uloop_fd_add(&gpio_interrupt_fd, ULOOP_READ);
     }
 }
 

@@ -269,6 +269,11 @@ static ubus_gpio_server_handlers_st const ubus_gpio_server_handlers =
     }
 };
 
+static struct epoll_event epoll_ctl_events;
+static struct epoll_event mcp23s17_epoll_events;
+static int gpio_pin_fd = -1;
+static int epoll_fd = -1;
+
 static void handle_interrupt(struct uloop_fd * u, unsigned int events)
 {
     (void)u;
@@ -281,22 +286,21 @@ static void handle_interrupt(struct uloop_fd * u, unsigned int events)
     // Read & return input register, thus clearing interrupt
     uint8_t const data = pifacedigital_read_reg(0x11, hw_addr);
 
-    fprintf(stderr, "data: 0x%x", data);
+    epoll_ctl(epoll_fd, EPOLL_CTL_MOD, gpio_pin_fd, &epoll_ctl_events);
+
+    if (data != 0xff)
+    {
+        fprintf(stderr, "data: 0x%x", data);
+    }
     int i;
     while ((i=read(u->fd, buf, sizeof buf)) > 0)
     {
         fprintf(stderr, "read bytes\n");
     }
-    fprintf(stderr, "and done i %d\n", i);
 }
 
 #define GPIO_INTERRUPT_PIN 25
-static int gpio_pin_fd = -1;
 static struct uloop_fd gpio_interrupt_fd = { .cb = handle_interrupt };
-static struct epoll_event epoll_ctl_events;
-static struct epoll_event mcp23s17_epoll_events;
-static int epoll_fd = -1; 
-
 
 static int init_epoll(void)
 {
@@ -334,7 +338,7 @@ static int init_epoll(void)
                 errno);
         return -1;
     } else {
-        epoll_ctl_events.events = EPOLLIN | EPOLLET;
+        epoll_ctl_events.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
         epoll_ctl_events.data.fd = gpio_pin_fd;
 
         if(epoll_ctl(epoll_fd, EPOLL_CTL_ADD, gpio_pin_fd, &epoll_ctl_events) != 0) {

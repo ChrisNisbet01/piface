@@ -14,6 +14,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/epoll.h>
+#include <limits.h>
 
 #define GPIO_INTERRUPT_PIN 25
 #define BIT(x) (1UL << (x))
@@ -330,12 +331,14 @@ static void handle_input_state_change(struct uloop_fd * u, unsigned int events)
     epoll_wait(server_ctx->epoll_fd, &mcp23s17_epoll_events, 1, -1);
 }
 
-static bool init_epoll(ubus_server_ctx_st * const server_ctx)
+static bool setup_input_state_change_handler(
+    ubus_server_ctx_st * const server_ctx,
+    uloop_fd_handler const handler)
 {
     bool result;
     int epoll_fd;
     int gpio_pin_fd;
-    char gpio_pin_filename[33]; 
+    char gpio_pin_filename[PATH_MAX];
 
     /* Calculate the GPIO pin's path. */
     snprintf(gpio_pin_filename,
@@ -374,8 +377,11 @@ static bool init_epoll(ubus_server_ctx_st * const server_ctx)
     server_ctx->gpio_pin_fd = gpio_pin_fd;
     server_ctx->epoll_fd = epoll_fd;
 
-    struct uloop_fd * uloop_fd = &server_ctx->gpio_interrupt_fd;
+    struct uloop_fd * const uloop_fd = &server_ctx->gpio_interrupt_fd;
+
     uloop_fd->fd = server_ctx->epoll_fd;
+    uloop_fd->cb = handler;
+
     uloop_fd_add(uloop_fd, ULOOP_READ);
 
     result = true;
@@ -388,7 +394,9 @@ static void listen_for_gpio_interrupts(
     ubus_server_ctx_st * const server_ctx)
 {
     pifacedigital_enable_interrupts();
-    if (!init_epoll(server_ctx))
+    if (!setup_input_state_change_handler(
+            server_ctx,
+            handle_input_state_change))
     {
         pifacedigital_disable_interrupts();
     }
@@ -420,7 +428,6 @@ static ubus_server_ctx_st * ubus_server_context_alloc(
     }
 
     server_ctx->ubus_ctx = ubus_ctx;
-    server_ctx->gpio_interrupt_fd.cb = handle_input_state_change;
     server_ctx->hw_addr = hw_addr;
     server_ctx->epoll_fd = -1;
     server_ctx->gpio_pin_fd = -1;

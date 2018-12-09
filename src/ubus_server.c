@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <sys/epoll.h>
 
 #define BIT(x) (1UL << (x))
 
@@ -280,14 +281,20 @@ static void handle_interrupt(struct uloop_fd * u, unsigned int events)
     while (read(u->fd, buf, sizeof buf) > 0)
     {
     }
+    fprintf(stderr, "and done\n");
 }
 
 #define GPIO_INTERRUPT_PIN 25
 static int gpio_pin_fd = -1;
 static struct uloop_fd gpio_interrupt_fd = { .cb = handle_interrupt };
+static struct epoll_event epoll_ctl_events;
+static struct epoll_event mcp23s17_epoll_events;
+static int epoll_fd = -1; 
 
-static void listen_for_gpio_interrupts(void)
+
+static int init_epoll(void)
 {
+
     // calculate the GPIO pin's path
     char gpio_pin_filename[33];
     snprintf(gpio_pin_filename,
@@ -295,9 +302,55 @@ static void listen_for_gpio_interrupts(void)
              "/sys/class/gpio/gpio%d/value",
              GPIO_INTERRUPT_PIN);
 
+    // if we haven't already, create the epoll and the GPIO pin fd's
+    if(epoll_fd <= 0) {
+        epoll_fd = epoll_create(1);
+        if (epoll_fd <= 0) {
+            fprintf(stderr,
+                    "mcp23s17_wait_for_interrupt: There was a error during "
+                    "the epoll_create.\n"
+                    "Error is %s (errno=%d)\n",
+                    strerror(errno),
+                    errno);
+            return -1;
+        }
+        gpio_pin_fd = open(gpio_pin_filename, O_RDONLY | O_NONBLOCK);
+    }
+
+    if(gpio_pin_fd <= 0) {
+        // we haven't successfully opened the GPIO pin fd
+        fprintf(stderr,
+                "mcp23s17_wait_for_interrupt: Can't open fd <%s> <%d>.\n"
+                "Error is %s (errno=%d)\n",
+                gpio_pin_filename,
+                gpio_pin_fd,
+                strerror(errno),
+                errno);
+        return -1;
+    } else {
+        epoll_ctl_events.events = EPOLLIN | EPOLLET;
+        epoll_ctl_events.data.fd = gpio_pin_fd;
+
+        if(epoll_ctl(epoll_fd, EPOLL_CTL_ADD, gpio_pin_fd, &epoll_ctl_events) != 0) {
+            fprintf(stderr,
+                    "mcp23s17_wait_for_interrupt: There was a error "
+                    "during the epoll_ctl EPOLL_CTL_ADD.\n");
+            fprintf(stderr,
+                    "Error is %s (errno=%d)\n",
+                    strerror(errno),
+                    errno);
+        }
+        // Ignore GPIO Initial Event
+        epoll_wait(epoll_fd, &mcp23s17_epoll_events, 1, 10);
+        return epoll_fd;
+    }
+}
+
+static void listen_for_gpio_interrupts(void)
+{
     pifacedigital_enable_interrupts(); 
 
-    gpio_pin_fd = open(gpio_pin_filename, O_RDONLY | O_NONBLOCK);
+    gpio_pin_fd = init_epoll();
     fprintf(stderr, "interrupt fd %d", gpio_pin_fd);
     if (gpio_pin_fd >= 0)
     {

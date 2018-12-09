@@ -288,23 +288,21 @@ static void handle_interrupt(struct uloop_fd * u, unsigned int events)
     {
         fprintf(stderr, "data: 0x%x\n", data);
     }
-    data = read_piface_register(INPUT);
-    if (data != 0xff)
-    {
-        fprintf(stderr, "input data: 0x%x\n", data);
-    }
-#if 1
-    char buf[1];
+
+    char buf[20];
     int i;
-    while ((i = read(epoll_fd, buf, sizeof buf)) > 0)
-    {
-        fprintf(stderr, "read bytes\n");
-    }
+
+    lseek(gpio_pin_fd, 0, SEEK_SET);
     while ((i = read(gpio_pin_fd, buf, sizeof buf)) > 0)
     {
-        fprintf(stderr, "read gpio bytes\n");
+        fprintf(stderr, "read %d gpio bytes\n", i);
     }
-#endif
+
+    lseek(epoll_fd, 0, SEEK_SET);
+    while ((i = read(epoll_fd, buf, sizeof buf)) > 0)
+    {
+        fprintf(stderr, "read %d epoll bytes\n", i);
+    }
 }
 
 #define GPIO_INTERRUPT_PIN 25
@@ -332,7 +330,7 @@ static int init_epoll(void)
                     errno);
             return -1;
         }
-        gpio_pin_fd = open(gpio_pin_filename, O_RDONLY);
+        gpio_pin_fd = open(gpio_pin_filename, O_RDONLY | O_NONBLOCK);
     }
 
     if(gpio_pin_fd <= 0) {
@@ -346,7 +344,7 @@ static int init_epoll(void)
                 errno);
         return -1;
     } else {
-        epoll_ctl_events.events = EPOLLIN | EPOLLET;
+        epoll_ctl_events.events = EPOLLIN | EPOLLPRI;
         epoll_ctl_events.data.fd = gpio_pin_fd;
 
         if(epoll_ctl(epoll_fd, EPOLL_CTL_ADD, gpio_pin_fd, &epoll_ctl_events) != 0) {
@@ -360,18 +358,6 @@ static int init_epoll(void)
         }
         // Ignore GPIO Initial Event
         epoll_wait(epoll_fd, &mcp23s17_epoll_events, 1, 10);
-        epoll_ctl_events.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
-        epoll_ctl_events.data.fd = gpio_pin_fd;
-        if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, gpio_pin_fd, &epoll_ctl_events) != 0)
-        {
-            fprintf(stderr,
-                    "mcp23s17_wait_for_interrupt: There was a error "
-                    "during the epoll_ctl EPOLL_CTL_MOD.\n");
-            fprintf(stderr,
-                    "Error is %s (errno=%d)\n",
-                    strerror(errno),
-                    errno);
-        }
         return epoll_fd;
     }
 }
@@ -382,10 +368,10 @@ static void listen_for_gpio_interrupts(void)
 
     init_epoll();
     fprintf(stderr, "interrupt fd %d %d\n", epoll_fd, gpio_pin_fd);
-    if (gpio_pin_fd >= 0)
+    if (epoll_fd >= 0)
     {
-        gpio_interrupt_fd.fd = gpio_pin_fd;
-        uloop_fd_add(&gpio_interrupt_fd, ULOOP_READ | ULOOP_EDGE_TRIGGER);
+        gpio_interrupt_fd.fd = epoll_fd;
+        uloop_fd_add(&gpio_interrupt_fd, ULOOP_READ);
     }
 }
 

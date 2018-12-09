@@ -279,10 +279,21 @@ static void handle_interrupt(struct uloop_fd * u, unsigned int events)
     (void)u;
     (void)events;
 
-    // Read & return input register, thus clearing interrupt
-    uint8_t data = read_piface_register(0x11);
+    /* This handler is called when the epoll_fd file handle is ready to read, 
+     * which means that it won't block when epoll_wait is called. 
+     */
+
+    /* XXX - I'm not quite sure if  the interrupt register should be read first, 
+     * or if epoll_wait() should be called first. 
+     */
+
+    /* Read the input register, thus clearing the interrupt. */
+    uint8_t data = read_piface_register(INPUT);
     fprintf(stderr, "TODO: send ubus exent showing input states 0x%x\n", data);
 
+    /* Now call epoll_wait, which will stop this handler getting called until 
+     * the inputs change state again. 
+     */
     epoll_wait(epoll_fd, &mcp23s17_epoll_events, 1, -1);
 }
 
@@ -299,48 +310,37 @@ static int init_epoll(void)
              "/sys/class/gpio/gpio%d/value",
              GPIO_INTERRUPT_PIN);
 
+    gpio_pin_fd = open(gpio_pin_filename, O_RDONLY | O_NONBLOCK);
+    if (gpio_pin_fd <= 0)
+    {
+        epoll_fd = -1;
+        goto done;
+    }
+
     // if we haven't already, create the epoll and the GPIO pin fd's
-    if(epoll_fd <= 0) {
-        epoll_fd = epoll_create(1);
-        if (epoll_fd <= 0) {
-            fprintf(stderr,
-                    "mcp23s17_wait_for_interrupt: There was a error during "
-                    "the epoll_create.\n"
-                    "Error is %s (errno=%d)\n",
-                    strerror(errno),
-                    errno);
-            return -1;
-        }
-        gpio_pin_fd = open(gpio_pin_filename, O_RDONLY | O_NONBLOCK);
+    epoll_fd = epoll_create(1);
+    if (epoll_fd <= 0)
+    {
+        close(gpio_pin_fd);
+        gpio_pin_fd = -1;
+        goto done;
     }
 
-    if(gpio_pin_fd <= 0) {
-        // we haven't successfully opened the GPIO pin fd
-        fprintf(stderr,
-                "mcp23s17_wait_for_interrupt: Can't open fd <%s> <%d>.\n"
-                "Error is %s (errno=%d)\n",
-                gpio_pin_filename,
-                gpio_pin_fd,
-                strerror(errno),
-                errno);
-        return -1;
-    } else {
-        epoll_ctl_events.events = EPOLLIN | EPOLLPRI | EPOLLET;
-        epoll_ctl_events.data.fd = gpio_pin_fd;
+    epoll_ctl_events.events = EPOLLIN | EPOLLPRI | EPOLLET;
+    epoll_ctl_events.data.fd = gpio_pin_fd;
 
-        if(epoll_ctl(epoll_fd, EPOLL_CTL_ADD, gpio_pin_fd, &epoll_ctl_events) != 0) {
-            fprintf(stderr,
-                    "mcp23s17_wait_for_interrupt: There was a error "
-                    "during the epoll_ctl EPOLL_CTL_ADD.\n");
-            fprintf(stderr,
-                    "Error is %s (errno=%d)\n",
-                    strerror(errno),
-                    errno);
-        }
-        // Ignore GPIO Initial Event
-        epoll_wait(epoll_fd, &mcp23s17_epoll_events, 1, 10);
-        return epoll_fd;
+    if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, gpio_pin_fd, &epoll_ctl_events) != 0)
+    {
+        close(gpio_pin_fd);
+        gpio_pin_fd = -1;
+
+        close(epoll_fd);
+        epoll_fd = -1;
+        goto done;
     }
+
+done:
+    return epoll_fd;
 }
 
 static void listen_for_gpio_interrupts(void)

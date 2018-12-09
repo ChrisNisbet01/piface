@@ -11,6 +11,8 @@
 #include <unistd.h>
 #include <errno.h>
 #include <stdlib.h>
+#include <unistd.h>
+#include <fcntl.h>
 
 #define BIT(x) (1UL << (x))
 
@@ -266,6 +268,44 @@ static ubus_gpio_server_handlers_st const ubus_gpio_server_handlers =
     }
 };
 
+static void handle_interrupt(struct uloop_fd * u, unsigned int events)
+{
+    (void)u;
+    (void)events;
+
+    char buf[1];
+
+    fprintf(stderr, "got interrupt\n");
+
+    while (read(u->fd, buf, sizeof buf) > 0)
+    {
+    }
+}
+
+#define GPIO_INTERRUPT_PIN 25
+static int gpio_pin_fd = -1;
+static struct uloop_fd gpio_interrupt_fd = { .cb = handle_interrupt };
+
+static void listen_for_gpio_interrupts(void)
+{
+    // calculate the GPIO pin's path
+    char gpio_pin_filename[33];
+    snprintf(gpio_pin_filename,
+             sizeof(gpio_pin_filename),
+             "/sys/class/gpio/gpio%d/value",
+             GPIO_INTERRUPT_PIN);
+
+    pifacedigital_enable_interrupts(); 
+
+    gpio_pin_fd = open(gpio_pin_filename, O_RDONLY | O_NONBLOCK);
+    fprintf(stderr, "interrupt fd %d", gpio_pin_fd);
+    if (gpio_pin_fd >= 0)
+    {
+        gpio_interrupt_fd.fd = gpio_pin_fd;
+        uloop_fd_add(&gpio_interrupt_fd, ULOOP_READ);
+    }
+}
+
 int run_ubus_server(int const piface_hw_address,
                     char const * const ubus_socket_name)
 {
@@ -287,6 +327,8 @@ int run_ubus_server(int const piface_hw_address,
         piface_ubus_name,
         &ubus_gpio_server_handlers,
         NULL); 
+
+    listen_for_gpio_interrupts();
 
     if (ubus_server_ctx == NULL)
     {

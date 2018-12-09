@@ -285,7 +285,7 @@ notify_input_state_change(uint8_t const states)
         ubus_gpio_data_value_set_bool(&value, (states & BIT(i)) != 0);
         ubus_notify_message_append_value(ctx, binary_input_str, i, &value);
     }
-    ubus_notify_message_send(ctx, ubus_server_ctx, ubus_ctx);
+    ubus_notify_message_send(ctx, ubus_server_ctx);
 }
 
 static struct epoll_event epoll_ctl_events;
@@ -293,13 +293,13 @@ static struct epoll_event mcp23s17_epoll_events;
 static int gpio_pin_fd = -1;
 static int epoll_fd = -1;
 
-static void handle_interrupt(struct uloop_fd * u, unsigned int events)
+static void handle_input_state_change(struct uloop_fd * u, unsigned int events)
 {
     (void)u;
     (void)events;
 
     /* This handler is called when the epoll_fd file handle is ready to read, 
-     * which means that it won't block when epoll_wait is called. 
+     * which means that it won't block here when epoll_wait is called. 
      */
 
     /* XXX - I'm not quite sure if  the interrupt register should be read first, 
@@ -307,9 +307,9 @@ static void handle_interrupt(struct uloop_fd * u, unsigned int events)
      */
 
     /* Read the input register, thus clearing the interrupt. */
-    uint8_t const data = read_piface_register(INPUT);
-    fprintf(stderr, "TODO: send ubus event showing input states 0x%x\n", data);
-    notify_input_state_change(data);
+    uint8_t const states = read_piface_register(INPUT);
+
+    notify_input_state_change(states);
 
     /* Now call epoll_wait, which will stop this handler getting called until 
      * the inputs change state again. 
@@ -318,7 +318,7 @@ static void handle_interrupt(struct uloop_fd * u, unsigned int events)
 }
 
 #define GPIO_INTERRUPT_PIN 25
-static struct uloop_fd gpio_interrupt_fd = { .cb = handle_interrupt };
+static struct uloop_fd gpio_interrupt_fd = { .cb = handle_input_state_change };
 
 static int init_epoll(void)
 {
@@ -398,11 +398,6 @@ int run_ubus_server(int const piface_hw_address,
         &ubus_gpio_server_handlers,
         NULL); 
 
-    if (send_state_change_notifications)
-    {
-        listen_for_gpio_interrupts();
-    }
-
     if (ubus_server_ctx == NULL)
     {
         DPRINTF("\r\nfailed to initialise UBUS server\n");
@@ -410,10 +405,15 @@ int run_ubus_server(int const piface_hw_address,
         goto done;
     }
 
+    if (send_state_change_notifications)
+    {
+        listen_for_gpio_interrupts();
+    }
+
     uloop_run();
     uloop_done(); 
 
-    ubus_gpio_server_done(ubus_ctx, ubus_server_ctx); 
+    ubus_gpio_server_done(ubus_server_ctx); 
 
     ubus_done();
 

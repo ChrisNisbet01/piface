@@ -17,6 +17,9 @@
 
 #define BIT(x) (1UL << (x))
 
+static struct ubus_context * ubus_ctx; 
+static ubus_gpio_server_ctx_st * ubus_server_ctx;
+
 static int hw_addr = 0;
 static char const binary_input_str[] = "binary-input";
 static char const binary_output_str[] = "binary-output"; 
@@ -269,6 +272,22 @@ static ubus_gpio_server_handlers_st const ubus_gpio_server_handlers =
     }
 };
 
+void
+notify_input_state_change(uint8_t const states)
+{
+    ubus_gpio_notify_message_ctx_st * const ctx = 
+        ubus_notify_message_create();
+
+    for (size_t i = 0; i < 8;  i++)
+    {
+        ubus_gpio_data_type_st value;
+
+        ubus_gpio_data_value_set_bool(&value, (states & BIT(i)) != 0);
+        ubus_notify_message_append_value(ctx, binary_input_str, i, &value);
+    }
+    ubus_notify_message_send(ctx, ubus_server_ctx, ubus_ctx);
+}
+
 static struct epoll_event epoll_ctl_events;
 static struct epoll_event mcp23s17_epoll_events;
 static int gpio_pin_fd = -1;
@@ -290,6 +309,7 @@ static void handle_interrupt(struct uloop_fd * u, unsigned int events)
     /* Read the input register, thus clearing the interrupt. */
     uint8_t const data = read_piface_register(INPUT);
     fprintf(stderr, "TODO: send ubus event showing input states 0x%x\n", data);
+    notify_input_state_change(data);
 
     /* Now call epoll_wait, which will stop this handler getting called until 
      * the inputs change state again. 
@@ -359,7 +379,7 @@ int run_ubus_server(int const piface_hw_address,
                     char const * const ubus_socket_name)
 {
     int result;
-    struct ubus_context * const ubus_ctx = ubus_initialise(ubus_socket_name);
+    ubus_ctx = ubus_initialise(ubus_socket_name);
 
     if (ubus_ctx == NULL)
     {
@@ -370,7 +390,7 @@ int run_ubus_server(int const piface_hw_address,
 
     hw_addr = piface_hw_address;
 
-    ubus_gpio_server_ctx_st * const ubus_server_ctx =
+    ubus_server_ctx =
         ubus_gpio_server_initialise(
         ubus_ctx,
         piface_ubus_name,

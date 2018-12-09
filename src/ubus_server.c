@@ -279,26 +279,33 @@ static void handle_interrupt(struct uloop_fd * u, unsigned int events)
     (void)u;
     (void)events;
 
-    char buf[1];
-
     fprintf(stderr, "got interrupt\n");
 
     // Read & return input register, thus clearing interrupt
-    uint8_t const data = pifacedigital_read_reg(0x11, hw_addr);
+    uint8_t data = pifacedigital_read_reg(0x11, hw_addr);
+    pifacedigital_read_reg(0x11, hw_addr); 
 
     if (data != 0xff)
     {
         fprintf(stderr, "data: 0x%x", data);
     }
-    int i;
-    while ((i=read(u->fd, buf, sizeof buf)) > 0)
+    data = read_piface_register(INPUT);
+    if (data != 0xff)
     {
-       fprintf(stderr, "read bytes\n");
+        fprintf(stderr, "input data: 0x%x", data);
+    }
+#if 0
+    char buf[1];
+    int i;
+    while ((i = read(u->fd, buf, sizeof buf)) > 0)
+    {
+        fprintf(stderr, "read bytes\n");
     }
     while ((i = read(gpio_pin_fd, buf, sizeof buf)) > 0)
     {
         fprintf(stderr, "read gpio bytes\n");
     }
+#endif
 }
 
 #define GPIO_INTERRUPT_PIN 25

@@ -366,7 +366,7 @@ static void listen_for_gpio_interrupts(void)
     fprintf(stderr, "interrupt fd %d", epoll_fd);
     if (epoll_fd >= 0)
     {
-        gpio_interrupt_fd.fd = epoll_fd;
+        gpio_interrupt_fd.fd = gpio_pin_fd;
         uloop_fd_add(&gpio_interrupt_fd, ULOOP_READ | ULOOP_EDGE_TRIGGER);
     }
 }

@@ -15,12 +15,19 @@
 #include <fcntl.h>
 #include <sys/epoll.h>
 
+#define GPIO_INTERRUPT_PIN 25
 #define BIT(x) (1UL << (x))
 
-static struct ubus_context * ubus_ctx; 
-static ubus_gpio_server_ctx_st * ubus_server_ctx;
+typedef struct ubus_server_ctx_st
+{
+    struct uloop_fd gpio_interrupt_fd;
+    struct ubus_context * ubus_ctx;
+    ubus_gpio_server_ctx_st * ubus_gpio_server_ctx;
+    int hw_addr;
+    int gpio_pin_fd;
+    int epoll_fd;
+} ubus_server_ctx_st;
 
-static int hw_addr = 0;
 static char const binary_input_str[] = "binary-input";
 static char const binary_output_str[] = "binary-output"; 
 static char const piface_ubus_name[] = "piface.gpio";
@@ -35,26 +42,14 @@ static size_t piface_num_outputs(void)
     return 8;
 }
 
-static uint32_t read_piface_register(
-    uint8_t const reg)
-{
-    return pifacedigital_read_reg(reg, hw_addr);
-}
-
-static void write_piface_register(
-    uint8_t const value, 
-    uint8_t const reg)
-{
-    pifacedigital_write_reg(value, reg, hw_addr); 
-}
-
 static void
 write_gpio_outputs( 
     uint32_t const gpio_to_write_bitmask,
-    uint32_t const gpio_values)
+    uint32_t const gpio_values,
+    int const hw_addr)
 {
 
-    uint8_t states = read_piface_register(OUTPUT);
+    uint8_t states = pifacedigital_read_reg(OUTPUT, hw_addr);
     /* Leave the pins we don't want to write as they are but clear 
      * the ones we do want to write. 
      */
@@ -62,11 +57,13 @@ write_gpio_outputs(
     /* Set the bit for any pins we want to turn on. */
     states |= gpio_values;
 
-    write_piface_register(states, OUTPUT);
+    pifacedigital_write_reg(states, OUTPUT, hw_addr);
 }
 
 static uint32_t
-read_gpio_inputs(uint32_t const interesting_pins_bitmask)
+read_gpio_inputs(
+    uint32_t const interesting_pins_bitmask,
+    int const hw_addr)
 {
     /* The state will read true if the input is open, and I want 
      * the input to read as active/ON when the input is low (i.e. 
@@ -74,7 +71,7 @@ read_gpio_inputs(uint32_t const interesting_pins_bitmask)
      * Therefore, the state should be reversed. 
      */
     uint32_t const all_states = 
-        ~read_piface_register(INPUT);
+        ~pifacedigital_read_reg(INPUT, hw_addr);
     uint32_t const interesting_states = 
         all_states & interesting_pins_bitmask;
 
@@ -82,10 +79,12 @@ read_gpio_inputs(uint32_t const interesting_pins_bitmask)
 }
 
 static uint32_t
-read_gpio_outputs(uint32_t const interesting_pins_bitmask)
+read_gpio_outputs(
+    uint32_t const interesting_pins_bitmask,
+    int const hw_addr)
 {
     uint32_t const all_states = 
-        read_piface_register(OUTPUT);
+        pifacedigital_read_reg(OUTPUT, hw_addr);
     uint32_t const interesting_states = 
         all_states & interesting_pins_bitmask;
 
@@ -100,6 +99,7 @@ typedef struct
 
 static void * get_start_callback(void * const callback_ctx)
 {
+    ubus_server_ctx_st * const server_ctx = callback_ctx;
     get_callback_ctx_st * const ctx = calloc(1, sizeof *ctx);
 
     if (ctx == NULL)
@@ -107,8 +107,8 @@ static void * get_start_callback(void * const callback_ctx)
         goto done;
     }
 
-    ctx->input_states = read_gpio_inputs(0xffffffff);
-    ctx->output_states = read_gpio_outputs(0xffffffff); 
+    ctx->input_states = read_gpio_inputs(0xffffffff, server_ctx->hw_addr);
+    ctx->output_states = read_gpio_outputs(0xffffffff, server_ctx->hw_addr);
 
 done:
     return ctx;
@@ -177,17 +177,27 @@ done:
     return read_io;
 }
 
+typedef struct set_context_st
+{
+    ubus_server_ctx_st * server_ctx;
+    io_states_st * io_states;
+} set_context_st;
+
 static void * set_start_callback(void * const callback_ctx)
 {
-    (void)callback_ctx;
-    io_states_st * const io_states = io_states_create();
+    set_context_st * const set_ctx = calloc(1, sizeof *set_ctx);
 
-    return io_states;
+    set_ctx->server_ctx = callback_ctx;
+    set_ctx->io_states = io_states_create();
+
+    return set_ctx;
 }
 
 static void set_end_callback(void * const callback_ctx)
 {
-    io_states_st * const io_states = callback_ctx;
+    set_context_st * const set_ctx = callback_ctx;
+    ubus_server_ctx_st * const server_ctx = set_ctx->server_ctx;
+    io_states_st * const io_states = set_ctx->io_states;
 
     if (io_states == NULL)
     {
@@ -197,10 +207,12 @@ static void set_end_callback(void * const callback_ctx)
     uint32_t const gpio_to_write_mask = io_states_get_interesting_states_mask(io_states);
     uint32_t const gpio_values = io_states_get_states_mask(io_states);
 
-    write_gpio_outputs(gpio_to_write_mask, gpio_values);
+    write_gpio_outputs(gpio_to_write_mask, gpio_values, server_ctx->hw_addr);
 
 done:
     io_states_free(io_states);
+    free(set_ctx);
+
     return;
 }
 
@@ -210,7 +222,8 @@ static bool set_callback(
     size_t const instance,
     ubus_gpio_data_type_st const * const value)
 {
-    io_states_st * const io_states = callback_ctx;
+    set_context_st * const set_ctx = callback_ctx;
+    io_states_st * const io_states = set_ctx->io_states;
     bool wrote_io;
     bool const io_instance_is_writeable =
         strcmp(io_type, binary_output_str) == 0
@@ -273,7 +286,9 @@ static ubus_gpio_server_handlers_st const ubus_gpio_server_handlers =
 };
 
 void
-notify_input_state_change(uint8_t const states)
+notify_input_state_change(
+    ubus_server_ctx_st * const server_ctx,
+    uint8_t const states)
 {
     ubus_gpio_notify_message_ctx_st * const ctx = 
         ubus_notify_message_create();
@@ -285,17 +300,14 @@ notify_input_state_change(uint8_t const states)
         ubus_gpio_data_value_set_bool(&value, (states & BIT(i)) != 0);
         ubus_notify_message_append_value(ctx, binary_input_str, i, &value);
     }
-    ubus_notify_message_send(ctx, ubus_server_ctx);
-}
 
-static struct epoll_event epoll_ctl_events;
-static struct epoll_event mcp23s17_epoll_events;
-static int gpio_pin_fd = -1;
-static int epoll_fd = -1;
+    ubus_notify_message_send(ctx, server_ctx->ubus_gpio_server_ctx);
+}
 
 static void handle_input_state_change(struct uloop_fd * u, unsigned int events)
 {
-    (void)u;
+    ubus_server_ctx_st * const server_ctx =
+        container_of(u, ubus_server_ctx_st, gpio_interrupt_fd);
     (void)events;
 
     /* This handler is called when the epoll_fd file handle is ready to read, 
@@ -307,24 +319,25 @@ static void handle_input_state_change(struct uloop_fd * u, unsigned int events)
      */
 
     /* Read the input register, thus clearing the interrupt. */
-    uint8_t const states = read_piface_register(INPUT);
+    uint8_t const states = pifacedigital_read_reg(INPUT, server_ctx->hw_addr);
 
-    notify_input_state_change(states);
+    notify_input_state_change(server_ctx, states);
 
     /* Now call epoll_wait, which will stop this handler getting called until 
      * the inputs change state again. 
      */
-    epoll_wait(epoll_fd, &mcp23s17_epoll_events, 1, -1);
+    struct epoll_event mcp23s17_epoll_events;
+    epoll_wait(server_ctx->epoll_fd, &mcp23s17_epoll_events, 1, -1);
 }
 
-#define GPIO_INTERRUPT_PIN 25
-static struct uloop_fd gpio_interrupt_fd = { .cb = handle_input_state_change };
-
-static int init_epoll(void)
+static bool init_epoll(ubus_server_ctx_st * const server_ctx)
 {
+    bool result;
+    int epoll_fd;
+    int gpio_pin_fd;
+    char gpio_pin_filename[33]; 
 
-    // calculate the GPIO pin's path
-    char gpio_pin_filename[33];
+    /* Calculate the GPIO pin's path. */
     snprintf(gpio_pin_filename,
              sizeof(gpio_pin_filename),
              "/sys/class/gpio/gpio%d/value",
@@ -333,7 +346,7 @@ static int init_epoll(void)
     gpio_pin_fd = open(gpio_pin_filename, O_RDONLY | O_NONBLOCK);
     if (gpio_pin_fd <= 0)
     {
-        epoll_fd = -1;
+        result = false;
         goto done;
     }
 
@@ -342,37 +355,91 @@ static int init_epoll(void)
     if (epoll_fd <= 0)
     {
         close(gpio_pin_fd);
-        gpio_pin_fd = -1;
+        result = false;
         goto done;
     }
 
+    struct epoll_event epoll_ctl_events;
     epoll_ctl_events.events = EPOLLIN | EPOLLPRI | EPOLLET;
     epoll_ctl_events.data.fd = gpio_pin_fd;
 
     if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, gpio_pin_fd, &epoll_ctl_events) != 0)
     {
         close(gpio_pin_fd);
-        gpio_pin_fd = -1;
-
         close(epoll_fd);
-        epoll_fd = -1;
+        result = false;
+        goto done;
+    }
+
+    server_ctx->gpio_pin_fd = gpio_pin_fd;
+    server_ctx->epoll_fd = epoll_fd;
+
+    struct uloop_fd * uloop_fd = &server_ctx->gpio_interrupt_fd;
+    uloop_fd->fd = server_ctx->epoll_fd;
+    uloop_fd_add(uloop_fd, ULOOP_READ);
+
+    result = true;
+
+done:
+    return result;
+}
+
+static void listen_for_gpio_interrupts(
+    ubus_server_ctx_st * const server_ctx)
+{
+    pifacedigital_enable_interrupts();
+    if (!init_epoll(server_ctx))
+    {
+        pifacedigital_disable_interrupts();
+    }
+}
+
+static void ubus_server_context_free(ubus_server_ctx_st * const server_ctx)
+{
+    if (server_ctx->epoll_fd >= 0)
+    {
+        close(server_ctx->epoll_fd);
+    }
+    if (server_ctx->gpio_pin_fd >= 0)
+    {
+        close(server_ctx->gpio_pin_fd);
+    }
+    ubus_gpio_server_done(server_ctx->ubus_gpio_server_ctx);
+    free(server_ctx);
+}
+
+static ubus_server_ctx_st * ubus_server_context_alloc(
+    struct ubus_context * const ubus_ctx,
+    int hw_addr)
+{
+    ubus_server_ctx_st * server_ctx = calloc(1, sizeof *server_ctx);
+
+    if (server_ctx == NULL)
+    {
+        goto done;
+    }
+
+    server_ctx->ubus_ctx = ubus_ctx;
+    server_ctx->gpio_interrupt_fd.cb = handle_input_state_change;
+    server_ctx->hw_addr = hw_addr;
+    server_ctx->epoll_fd = -1;
+    server_ctx->gpio_pin_fd = -1;
+    server_ctx->ubus_gpio_server_ctx = 
+        ubus_gpio_server_initialise(
+            ubus_ctx,
+            piface_ubus_name,
+            &ubus_gpio_server_handlers,
+            server_ctx);
+    if (server_ctx->ubus_gpio_server_ctx == NULL)
+    {
+        DPRINTF("\r\nfailed to initialise UBUS server\n");
+        ubus_server_context_free(server_ctx);
+        server_ctx = NULL;
         goto done;
     }
 
 done:
-    return epoll_fd;
-}
-
-static void listen_for_gpio_interrupts(void)
-{
-    pifacedigital_enable_interrupts(); 
-
-    init_epoll();
-    if (epoll_fd >= 0)
-    {
-        gpio_interrupt_fd.fd = epoll_fd;
-        uloop_fd_add(&gpio_interrupt_fd, ULOOP_READ);
-    }
+    return server_ctx;
 }
 
 int run_ubus_server(int const piface_hw_address,
@@ -380,7 +447,7 @@ int run_ubus_server(int const piface_hw_address,
                     bool const send_state_change_notifications)
 {
     int result;
-    ubus_ctx = ubus_initialise(ubus_socket_name);
+    struct ubus_context * const ubus_ctx = ubus_initialise(ubus_socket_name);
 
     if (ubus_ctx == NULL)
     {
@@ -389,31 +456,24 @@ int run_ubus_server(int const piface_hw_address,
         goto done;
     }
 
-    hw_addr = piface_hw_address;
-
-    ubus_server_ctx =
-        ubus_gpio_server_initialise(
-        ubus_ctx,
-        piface_ubus_name,
-        &ubus_gpio_server_handlers,
-        NULL); 
-
-    if (ubus_server_ctx == NULL)
+    ubus_server_ctx_st * const server_ctx =
+        ubus_server_context_alloc(
+            ubus_ctx, 
+            piface_hw_address);
+    if (server_ctx == NULL)
     {
-        DPRINTF("\r\nfailed to initialise UBUS server\n");
-        result = -1;
         goto done;
     }
 
     if (send_state_change_notifications)
     {
-        listen_for_gpio_interrupts();
+        listen_for_gpio_interrupts(server_ctx);
     }
 
     uloop_run();
     uloop_done(); 
 
-    ubus_gpio_server_done(ubus_server_ctx); 
+    ubus_server_context_free(server_ctx);
 
     ubus_done();
 

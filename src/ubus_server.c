@@ -361,6 +361,18 @@ static int init_epoll(void)
         }
         // Ignore GPIO Initial Event
         epoll_wait(epoll_fd, &mcp23s17_epoll_events, 1, 10);
+        epoll_ctl_events.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
+        epoll_ctl_events.data.fd = gpio_pin_fd;
+        if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, gpio_pin_fd, &epoll_ctl_events) != 0)
+        {
+            fprintf(stderr,
+                    "mcp23s17_wait_for_interrupt: There was a error "
+                    "during the epoll_ctl EPOLL_CTL_MOD.\n");
+            fprintf(stderr,
+                    "Error is %s (errno=%d)\n",
+                    strerror(errno),
+                    errno);
+        }
         return epoll_fd;
     }
 }
@@ -374,7 +386,7 @@ static void listen_for_gpio_interrupts(void)
     if (epoll_fd >= 0)
     {
         gpio_interrupt_fd.fd = epoll_fd;
-        uloop_fd_add(&gpio_interrupt_fd, ULOOP_READ /* | ULOOP_EDGE_TRIGGER */);
+        uloop_fd_add(&gpio_interrupt_fd, ULOOP_READ | ULOOP_EDGE_TRIGGER);
     }
 }
 

@@ -286,8 +286,6 @@ static void handle_interrupt(struct uloop_fd * u, unsigned int events)
     // Read & return input register, thus clearing interrupt
     uint8_t const data = pifacedigital_read_reg(0x11, hw_addr);
 
-    epoll_ctl(epoll_fd, EPOLL_CTL_MOD, gpio_pin_fd, &epoll_ctl_events);
-
     if (data != 0xff)
     {
         fprintf(stderr, "data: 0x%x", data);
@@ -338,7 +336,7 @@ static int init_epoll(void)
                 errno);
         return -1;
     } else {
-        epoll_ctl_events.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
+        epoll_ctl_events.events = EPOLLIN | EPOLLET;
         epoll_ctl_events.data.fd = gpio_pin_fd;
 
         if(epoll_ctl(epoll_fd, EPOLL_CTL_ADD, gpio_pin_fd, &epoll_ctl_events) != 0) {
@@ -360,12 +358,12 @@ static void listen_for_gpio_interrupts(void)
 {
     pifacedigital_enable_interrupts(); 
 
-    gpio_pin_fd = init_epoll();
-    fprintf(stderr, "interrupt fd %d", gpio_pin_fd);
-    if (gpio_pin_fd >= 0)
+    init_epoll();
+    fprintf(stderr, "interrupt fd %d", epoll_fd);
+    if (epoll_fd >= 0)
     {
-        gpio_interrupt_fd.fd = gpio_pin_fd;
-        uloop_fd_add(&gpio_interrupt_fd, ULOOP_READ);
+        gpio_interrupt_fd.fd = epoll_fd;
+        uloop_fd_add(&gpio_interrupt_fd, ULOOP_READ | ULOOP_EDGE_TRIGGER);
     }
 }
 

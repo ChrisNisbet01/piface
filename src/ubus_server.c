@@ -295,6 +295,10 @@ static void handle_interrupt(struct uloop_fd * u, unsigned int events)
     {
         fprintf(stderr, "read bytes\n");
     }
+    while ((i = read(gpio_pin_fd, buf, sizeof buf)) > 0)
+    {
+        fprintf(stderr, "read gpio bytes\n");
+    }
 }
 
 #define GPIO_INTERRUPT_PIN 25

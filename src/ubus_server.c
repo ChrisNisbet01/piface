@@ -340,6 +340,7 @@ static int init_epoll(void)
                 errno);
         return -1;
     } else {
+#if 0
         epoll_ctl_events.events = EPOLLIN | EPOLLET;
         epoll_ctl_events.data.fd = gpio_pin_fd;
 
@@ -355,6 +356,7 @@ static int init_epoll(void)
         // Ignore GPIO Initial Event
         epoll_wait(epoll_fd, &mcp23s17_epoll_events, 1, 10);
         return epoll_fd;
+#endif
     }
 }
 
@@ -363,8 +365,8 @@ static void listen_for_gpio_interrupts(void)
     pifacedigital_enable_interrupts(); 
 
     init_epoll();
-    fprintf(stderr, "interrupt fd %d", epoll_fd);
-    if (epoll_fd >= 0)
+    fprintf(stderr, "interrupt fd %d %d", epoll_fd, gpio_pin_fd);
+    if (gpio_pin_fd >= 0)
     {
         gpio_interrupt_fd.fd = gpio_pin_fd;
         uloop_fd_add(&gpio_interrupt_fd, ULOOP_READ | ULOOP_EDGE_TRIGGER);

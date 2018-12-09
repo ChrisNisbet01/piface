@@ -19,6 +19,7 @@ static void usage(char const * const program_name)
     fprintf(stdout, "  -d %-21s %s\n", "", "Run as a daemon");
     fprintf(stdout, "  -s %-21s %s\n", "ubus socket", "Ubus socket path");
     fprintf(stdout, "  -h %-21s %s\n", "", "PiFace SPI address");
+    fprintf(stdout, "  -d %-21s %s\n", "", "Send state change notifications");
 }
 
 int main(int argc, char * * argv)
@@ -29,8 +30,9 @@ int main(int argc, char * * argv)
     int option;
     char const * ubus_socket_name = NULL;
     int hw_addr = 0;
+    bool send_state_change_notifications = false;
 
-    while ((option = getopt(argc, argv, "h:s:?d")) != -1)
+    while ((option = getopt(argc, argv, "h:s:?dn")) != -1)
     {
         switch (option)
         {
@@ -42,6 +44,9 @@ int main(int argc, char * * argv)
                 break;
             case 'h':
                 hw_addr = atoi(argv[optind]);
+                break;
+            case 'n':
+                send_state_change_notifications = true;
                 break;
             case '?':
                 usage(basename(argv[0]));
@@ -74,7 +79,9 @@ int main(int argc, char * * argv)
         goto done;
     }
 
-    if (run_ubus_server(hw_addr, ubus_socket_name) < 0)
+    if (run_ubus_server(hw_addr, 
+                        ubus_socket_name,
+                        send_state_change_notifications) < 0)
     {
         fprintf(stderr, "Error running UBUS server\n");
         exit_code = EXIT_FAILURE;

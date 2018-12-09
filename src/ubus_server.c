@@ -376,7 +376,8 @@ static void listen_for_gpio_interrupts(void)
 }
 
 int run_ubus_server(int const piface_hw_address,
-                    char const * const ubus_socket_name)
+                    char const * const ubus_socket_name,
+                    bool const send_state_change_notifications)
 {
     int result;
     ubus_ctx = ubus_initialise(ubus_socket_name);
@@ -397,7 +398,10 @@ int run_ubus_server(int const piface_hw_address,
         &ubus_gpio_server_handlers,
         NULL); 
 
-    listen_for_gpio_interrupts();
+    if (send_state_change_notifications)
+    {
+        listen_for_gpio_interrupts();
+    }
 
     if (ubus_server_ctx == NULL)
     {

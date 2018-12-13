@@ -1,14 +1,10 @@
-DEPDIR := dep
+DEP_DIR := dep
 SRC_DIR := src
 OBJ_DIR := obj
 BIN_DIR := bin
 TARGET = $(BIN_DIR)/piface
 
-$(shell mkdir -p $(DEPDIR) >/dev/null)
-$(shell mkdir -p $(OBJ_DIR) >/dev/null)
-$(shell mkdir -p $(BIN_DIR) >/dev/null)
-
-DEPFLAGS = -MT $@ -MMD -MP -MF $(DEPDIR)/$*.Td
+DEPFLAGS = -MT $@ -MMD -MP -MF $(DEP_DIR)/$*.Td
 
 ifneq ($(LIB_PREFIX),)
 INCLUDES += -I$(LIB_PREFIX)/include
@@ -37,22 +33,29 @@ all: $(TARGET)
 
 .PHONY: clean
 clean:
-	rm -rf $(TARGET) $(OBJ_DIR)/* $(DEPDIR)/*
+	rm -rf $(BIN_DIR)/* $(OBJ_DIR)/* $(DEP_DIR)/*
 
-$(TARGET): $(OBJS)
+$(TARGET): $(OBJS) | $(BIN_DIR)
 	${CC} -o $@ ${OBJS} ${LDFLAGS} ${LIBS}
 
 COMPILE.c = $(CC) $(DEPFLAGS) $(CFLAGS) $(CPPFLAGS) $(TARGET_ARCH) -c
 COMPILE.cc = $(CXX) $(DEPFLAGS) $(CXXFLAGS) $(CPPFLAGS) $(TARGET_ARCH) -c
-POSTCOMPILE = @mv -f $(DEPDIR)/$*.Td $(DEPDIR)/$*.d && touch $@
+POSTCOMPILE = @mv -f $(DEP_DIR)/$*.Td $(DEP_DIR)/$*.d && touch $@
 
-$(OBJ_DIR)/%.o : $(SRC_DIR)/%.c
-$(OBJ_DIR)/%.o : $(SRC_DIR)/%.c $(DEPDIR)/%.d
+$(BIN_DIR):
+	mkdir -p $@
+
+$(OBJ_DIR):
+	mkdir -p $@
+
+$(DEP_DIR):
+	mkdir -p $@
+
+$(DEP_DIR)/%.d: ;
+
+$(OBJ_DIR)/%.o : $(SRC_DIR)/%.c $(DEP_DIR)/%.d | $(OBJ_DIR) $(DEP_DIR)
 	$(COMPILE.c) $(OUTPUT_OPTION) $<
 	$(POSTCOMPILE)
 
-$(DEPDIR)/%.d: ;
-.PRECIOUS: $(DEPDIR)/%.d
-
--include $(patsubst %,$(DEPDIR)/%.d,$(basename $(notdir $(SRCS))))
+-include $(patsubst %,$(DEP_DIR)/%.d,$(basename $(notdir $(SRCS))))
 

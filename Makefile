@@ -10,7 +10,7 @@ ifneq ($(LIB_PREFIX),)
 INCLUDES += -I$(LIB_PREFIX)/include
 endif
 
-LIB_PREFIX?=/usr/local
+LIB_PREFIX ?= /usr/local
 INCLUDES += -I/src
 DEFINES = -D_GNU_SOURCE
 LIBS=\
@@ -39,7 +39,6 @@ $(TARGET): $(OBJS) | $(BIN_DIR)
 	${CC} -o $@ ${OBJS} ${LDFLAGS} ${LIBS}
 
 COMPILE.c = $(CC) $(DEPFLAGS) $(CFLAGS) $(CPPFLAGS) $(TARGET_ARCH) -c
-COMPILE.cc = $(CXX) $(DEPFLAGS) $(CXXFLAGS) $(CPPFLAGS) $(TARGET_ARCH) -c
 POSTCOMPILE = @mv -f $(DEP_DIR)/$*.Td $(DEP_DIR)/$*.d && touch $@
 
 $(BIN_DIR):
